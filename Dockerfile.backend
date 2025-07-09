@@ -1,0 +1,20 @@
+# Dockerfile.backend
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# Copy the requirements file first to leverage Docker layer caching
+COPY requirements.txt .
+
+# We pass credentials as build arguments to securely install packages
+# from our 'bookverse-pypi-local' repository in Artifactory.
+ARG JFROG_URL
+ARG JFROG_USER
+ARG JFROG_ACCESS_TOKEN
+RUN pip install --upgrade pip
+RUN pip install --extra-index-url https://${JFROG_USER}:${JFROG_ACCESS_TOKEN}@${JFROG_URL#*//}/artifactory/api/pypi/bookverse-pypi-local/simple -r requirements.txt
+
+COPY backend.py .
+
+EXPOSE 5000
+CMD ["python", "backend.py"]

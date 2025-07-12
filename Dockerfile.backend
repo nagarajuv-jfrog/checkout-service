@@ -1,20 +1,24 @@
-# Dockerfile.backend
+# Start with a lightweight Python base image
 FROM python:3.9-slim
 
+# Set the working directory inside the container
 WORKDIR /app
 
-# Copy the requirements file first to leverage Docker layer caching
+# Copy the requirements file into the container
 COPY requirements.txt .
 
-# We pass credentials as build arguments to securely install packages
-# from our 'bookverse-pypi-local' repository in Artifactory.
+# Install the Python dependencies using credentials
 ARG JFROG_URL
 ARG JFROG_USER
 ARG JFROG_ACCESS_TOKEN
 RUN pip install --upgrade pip
 RUN pip install --extra-index-url https://${JFROG_USER}:${JFROG_ACCESS_TOKEN}@${JFROG_URL#*//}/artifactory/api/pypi/bookverse-pypi-local/simple -r requirements.txt
 
+# Copy the rest of the backend application code into the container
 COPY backend.py .
 
+# Expose port 5000
 EXPOSE 5000
+
+# The command to run when the container starts
 CMD ["python", "backend.py"]

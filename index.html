@@ -62,8 +62,8 @@
 
                 messageDiv.innerHTML = `<p class="text-gray-500">Processing your order...</p>`;
                 
-                // Call the checkout backend API using its Kubernetes service name and new port.
-                fetch('http://checkout-backend-svc:5000/api/checkout', {
+                // Call the checkout backend API using a relative path.
+                fetch('/api/checkout', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

@@ -219,7 +219,7 @@ jobs:
         run: |
           jfrog rbp ${{ github.event.repository.name }} ${{ needs.build-and-publish.outputs.version }} STAGE --promotion-type=move --include-repos=bookverse-docker-internal
 
-      - name: Create and Attach STAGE Sign-off & Trace Evidence (PROD Gate)
+      - name: Create and Attach STAGE Sign-off & Trace Evidence (Gate to PROD)
         run: |
           # Randomly select an approver
           approvers=("product-manager-a@bookverse.com" "product-manager-b@bookverse.com" "cto@bookverse.com")

@@ -72,6 +72,20 @@ jobs:
         run: |
           jfrog rbc ${{ github.event.repository.name }} ${{ steps.set_version.outputs.VERSION }} --project=bookverse --build-name=${{ github.event.repository.name }} --build-number=${{ github.run_number }}
 
+      - name: Create and Attach Build Link Evidence
+        run: |
+          cat <<EOF > build-link-evidence.json
+          {
+            "builder": { "id": "uri:github-actions" },
+            "runId": { "workflow_run_id": "${{ github.run_id }}" }
+          }
+          EOF
+
+          jf evd create --predicate build-link-evidence.json \
+          --predicate-type https://in-toto.io/attestation/link/v0.3 \
+          --release-bundle ${{ github.event.repository.name }} --release-bundle-version ${{ steps.set_version.outputs.VERSION }} \
+          --project bookverse --key "${{ secrets.BOOKVERSE_KEY }}"
+
   promote-bundle:
     needs: build-and-publish
     runs-on: ubuntu-latest
@@ -84,17 +98,162 @@ jobs:
           JF_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
           JF_PROJECT: "bookverse"
 
+      - name: Create and Attach Commit Review Evidence (Pre-DEV Gate)
+        run: |
+          # Randomly select committer and reviewer
+          committers=("dev-a@bookverse.com" "dev-b@bookverse.com" "dev-c@bookverse.com")
+          reviewers=("qa-a@bookverse.com" "qa-b@bookverse.com" "lead@bookverse.com")
+          statuses=("Approved" "Approved" "Approved" "Requires Changes")
+          
+          committer=${committers[$RANDOM % ${#committers[@]}]}
+          reviewer=${reviewers[$RANDOM % ${#reviewers[@]}]}
+          status=${statuses[$RANDOM % ${#statuses[@]}]}
+
+          cat <<EOF > commit-review.json
+          {
+            "attributes": [
+              { "name": "committer", "value": "$committer" },
+              { "name": "reviewer", "value": "$reviewer" },
+              { "name": "review_status", "value": "$status" }
+            ]
+          }
+          EOF
+
+          jf evd create --predicate commit-review.json \
+          --predicate-type https://in-toto.io/attestation/scai/attribute-report \
+          --release-bundle ${{ github.event.repository.name }} --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
+          --project bookverse --key "${{ secrets.BOOKVERSE_KEY }}"
+
       - name: Promote to DEV
         run: |
           jfrog rbp ${{ github.event.repository.name }} ${{ needs.build-and-publish.outputs.version }} DEV --promotion-type=move --include-repos=bookverse-docker-internal
 
-#      - name: Promote to QA
-#        run: |
-#          jfrog rbp ${{ github.event.repository.name }} ${{ needs.build-and-publish.outputs.version }} QA --promotion-type=move --include-repos=bookverse-docker-internal
+      - name: Create and Attach DEV Smoke Test Evidence (QA Gate)
+        run: |
+          # Generate random test results
+          passed_tests=$((RANDOM % 3 + 1))
+          failed_tests=$((3 - passed_tests))
+          duration=$(echo "scale=2; $RANDOM/1000" | bc)
+          api_duration=$((RANDOM % 200 + 50))
+          db_duration=$((RANDOM % 100 + 20))
+          frontend_duration=$((RANDOM % 15000 + 5000))
+          test_result=$(if [ $failed_tests -eq 0 ]; then echo "PASSED"; else echo "FAILED"; fi)
 
-#      - name: Promote to STAGE
-#        run: |
-#          jfrog rbp ${{ github.event.repository.name }} ${{ needs.build-and-publish.outputs.version }} STAGE --promotion-type=move --include-repos=bookverse-docker-internal
+          cat <<EOF > dev-smoke-test.json
+          {
+            "summary": {
+              "result": "$test_result",
+              "test_suite": "Smoke Tests (ran in DEV)",
+              "total_tests": 3,
+              "passed": $passed_tests,
+              "failed": $failed_tests,
+              "duration_seconds": $duration
+            },
+            "tests": [
+              { "name": "API Endpoint Connectivity", "status": "PASSED", "duration_ms": $api_duration },
+              { "name": "Database Connection", "status": "PASSED", "duration_ms": $db_duration },
+              { "name": "Frontend Load Test", "status": "$test_result", "duration_ms": $frontend_duration }
+            ]
+          }
+          EOF
+
+          jf evd create --predicate dev-smoke-test.json \
+          --predicate-type https://in-toto.io/attestation/test-result/v0.1 \
+          --release-bundle ${{ github.event.repository.name }} --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
+          --project bookverse --key "${{ secrets.BOOKVERSE_KEY }}"
+
+      - name: Promote to QA
+        run: |
+          jfrog rbp ${{ github.event.repository.name }} ${{ needs.build-and-publish.outputs.version }} QA --promotion-type=move --include-repos=bookverse-docker-internal
+
+      - name: Create and Attach QA Test & Jira Evidence (STAGE Gate)
+        run: |
+          # Generate random QA test results
+          passed_qa=$((RANDOM % 100 + 250))
+          failed_qa=$((RANDOM % 5))
+          skipped_qa=$((RANDOM % 5))
+          duration_qa=$((RANDOM % 60 + 90))
+          qa_result=$(if [ $failed_qa -eq 0 ]; then echo "PASSED"; else echo "FAILED"; fi)
+
+          cat <<EOF > qa-test-results.json
+          {
+            "result": "$qa_result",
+            "duration": "${duration_qa}s",
+            "passed": $passed_qa,
+            "failed": $failed_qa,
+            "skipped": $skipped_qa,
+            "test_suite": "QA Regression Suite (ran in QA)"
+          }
+          EOF
+          
+          cat <<EOF > qa-jira-issues.json
+          {
+            "attributes": [
+              {
+                "name": "jira_integration",
+                "value": {
+                  "server_url": "https://bookverse.atlassian.net",
+                  "query": "fixVersion = ${{ needs.build-and-publish.outputs.version }} AND status in (Resolved, Closed)",
+                  "issues_found": 2,
+                  "issues": [
+                    { "key": "BOOK-101", "summary": "UI glitch on checkout page for large orders", "status": "Closed", "priority": "High" },
+                    { "key": "BOOK-105", "summary": "API returns 500 error when book stock is zero", "status": "Resolved", "priority": "Medium" }
+                  ]
+                }
+              }
+            ]
+          }
+          EOF      
+
+          jf evd create --predicate qa-test-results.json \
+          --predicate-type https://in-toto.io/attestation/test-result/v0.1 \
+          --release-bundle ${{ github.event.repository.name }} --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
+          --project bookverse --key "${{ secrets.BOOKVERSE_KEY }}"
+
+          jf evd create --predicate qa-jira-issues.json \
+          --predicate-type hhttps://in-toto.io/attestation/scai/attribute-report \
+          --release-bundle ${{ github.event.repository.name }} --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
+          --project bookverse --key "${{ secrets.BOOKVERSE_KEY }}"
+
+      - name: Promote to STAGE
+        run: |
+          jfrog rbp ${{ github.event.repository.name }} ${{ needs.build-and-publish.outputs.version }} STAGE --promotion-type=move --include-repos=bookverse-docker-internal
+
+      - name: Create and Attach STAGE Sign-off & Trace Evidence (PROD Gate)
+        run: |
+          # Randomly select an approver
+          approvers=("product-manager-a@bookverse.com" "product-manager-b@bookverse.com" "cto@bookverse.com")
+          approver=${approvers[$RANDOM % ${#approvers[@]}]}
+          trace_id="trace-$(openssl rand -hex 8)"
+
+          cat <<EOF > stage-signoff.json
+          {
+            "attributes": [
+              { "name": "quality_gate_passed", "value": true },
+              { "name": "approved_by", "value": "$approver" }
+            ]
+          }
+          EOF
+
+          cat <<EOF > stage-runtime-trace.json
+          {
+            "trace_id": "$trace_id",
+            "environment": "STAGE",
+            "status": "SUCCESS",
+            "duration": "7200s",
+            "details": "Application ran successfully under load test in staging environment."
+          }
+          EOF
+
+          jf evd create --predicate stage-signoff.json \
+          --predicate-type https://in-toto.io/attestation/scai/attribute-report \
+          --release-bundle ${{ github.event.repository.name }} --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
+          --project bookverse --key "${{ secrets.BOOKVERSE_KEY }}"
+
+          jf evd create --predicate stage-runtime-trace.json \
+          --predicate-type https://in-toto.io/attestation/runtime-trace/v0.1 \
+          --release-bundle ${{ github.event.repository.name }} --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
+          --project bookverse --key "${{ secrets.BOOKVERSE_KEY }}"
 
       - name: Promote to PROD
         run: |

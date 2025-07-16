@@ -214,7 +214,7 @@ jobs:
           EOF
 
           jf evd create --predicate dev-smoke-test.json \
-          --predicate-type "Test Results" \
+          --predicate-type "Test Results" --markdown dev-smoke-test.md \
           --release-bundle ${{ github.event.repository.name }} --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
           --project bookverse --key-alias "bookverse_key" --key "${{ secrets.BOOKVERSE_KEY }}"
 
@@ -241,7 +241,17 @@ jobs:
             "test_suite": "QA Regression Suite (ran in QA)"
           }
           EOF
-          
+          cat <<EOF > qa-test-results.md
+          # QA Regression Suite Results
+          | Metric  | Value     |
+          |---------|-----------|
+          | Result  | $qa_result  |
+          | Passed  | $passed_qa  |
+          | Failed  | $failed_qa  |
+          | Skipped | $skipped_qa |
+          | Duration| ${duration_qa}s |
+          EOF
+
           cat <<EOF > qa-jira-issues.json
           {
             "attributes": [
@@ -260,7 +270,16 @@ jobs:
             ]
           }
           EOF      
-
+          cat <<EOF > qa-jira-issues.md
+          # Jira Issue Tracking
+          This evidence shows all Jira tickets resolved in this version.
+          - **Jira Query:** \`fixVersion = ${{ needs.build-and-publish.outputs.version }} AND status in (Resolved, Closed)\`
+          - **Issues Found:** 2
+          ### Resolved Issues
+          1.  **BOOK-101:** UI glitch on checkout page for large orders (Status: Closed)
+          2.  **BOOK-105:** API returns 500 error when book stock is zero (Status: Resolved)
+          EOF
+          
           jf evd create --predicate qa-test-results.json \
           --predicate-type "Test Results" \
           --release-bundle ${{ github.event.repository.name }} --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \

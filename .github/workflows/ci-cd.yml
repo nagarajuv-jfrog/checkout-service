@@ -105,8 +105,15 @@ jobs:
           }
           EOF
 
+          # Create Markdown Evidence
+          cat <<EOF > build-link-evidence.md
+          # Build Link Evidence
+          This evidence links the release bundle to the CI/CD pipeline that built it.
+          - **Workflow Run:** [${{ github.server.url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}](${{ github.server.url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          EOF
+
           jf evd create --predicate build-link-evidence.json \
-          --predicate-type "Build Link" \
+          --predicate-type "Build Link"  --markdown build-link-evidence.md \
           --release-bundle ${{ github.event.repository.name }} --release-bundle-version ${{ steps.set_version.outputs.VERSION }} \
           --project bookverse --key-alias "bookverse_key" --key "${{ secrets.BOOKVERSE_KEY }}"
 
@@ -145,8 +152,19 @@ jobs:
           }
           EOF
 
+          # Create Markdown Evidence
+          cat <<EOF > commit-review.md
+          # Commit Review Evidence
+          This evidence attests that the code has passed the peer review gate.
+          | Field         | Value        |
+          |---------------|--------------|
+          | **Committer** | \`$committer\` |
+          | **Reviewer** | \`$reviewer\`  |
+          | **Status** | **$status** |
+          EOF
+
           jf evd create --predicate commit-review.json \
-          --predicate-type "Attribute Report" \
+          --predicate-type "Attribute Report" --markdown commit-review.md \
           --release-bundle ${{ github.event.repository.name }} --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
           --project bookverse --key-alias "bookverse_key" --key "${{ secrets.BOOKVERSE_KEY }}"
 

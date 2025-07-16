@@ -231,6 +231,7 @@ jobs:
           duration_qa=$((RANDOM % 60 + 90))
           qa_result=$(if [ $failed_qa -eq 0 ]; then echo "PASSED"; else echo "FAILED"; fi)
 
+          # Create QA Test JSON and Markdown
           cat <<EOF > qa-test-results.json
           {
             "result": "$qa_result",
@@ -252,6 +253,7 @@ jobs:
           | Duration| ${duration_qa}s |
           EOF
 
+          # Create Jira Issues JSON and Markdown
           cat <<EOF > qa-jira-issues.json
           {
             "attributes": [
@@ -262,14 +264,24 @@ jobs:
                   "query": "fixVersion = ${{ needs.build-and-publish.outputs.version }} AND status in (Resolved, Closed)",
                   "issues_found": 2,
                   "issues": [
-                    { "key": "BOOK-101", "summary": "UI glitch on checkout page for large orders", "status": "Closed", "priority": "High" },
-                    { "key": "BOOK-105", "summary": "API returns 500 error when book stock is zero", "status": "Resolved", "priority": "Medium" }
+                    {
+                      "key": "BOOK-101",
+                      "summary": "UI glitch on checkout page for large orders",
+                      "status": "Closed",
+                      "priority": "High"
+                    },
+                    {
+                      "key": "BOOK-105",
+                      "summary": "API returns 500 error when book stock is zero",
+                      "status": "Resolved",
+                      "priority": "Medium"
+                    }
                   ]
                 }
               }
             ]
           }
-          EOF      
+          EOF
           cat <<EOF > qa-jira-issues.md
           # Jira Issue Tracking
           This evidence shows all Jira tickets resolved in this version.
@@ -279,16 +291,27 @@ jobs:
           1.  **BOOK-101:** UI glitch on checkout page for large orders (Status: Closed)
           2.  **BOOK-105:** API returns 500 error when book stock is zero (Status: Resolved)
           EOF
-          
-          jf evd create --predicate qa-test-results.json \
-          --predicate-type "Test Results" \
-          --release-bundle ${{ github.event.repository.name }} --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
-          --project bookverse --key-alias "bookverse_key" --key "${{ secrets.BOOKVERSE_KEY }}"
 
-          jf evd create --predicate qa-jira-issues.json \
-          --predicate-type "Attribute Report" \
-          --release-bundle ${{ github.event.repository.name }} --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
-          --project bookverse --key-alias "bookverse_key" --key "${{ secrets.BOOKVERSE_KEY }}"
+          # Create Evidences with JFrog CLI
+          jfrog evd create \
+            --predicate qa-test-results.json \
+            --markdown qa-test-results.md \
+            --predicate-type "Test Result" \
+            --release-bundle ${{ github.event.repository.name }} \
+            --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
+            --project bookverse \
+            --key-alias "bookverse_key" \
+            --key "${{ secrets.BOOKVERSE_KEY }}"
+            
+          jfrog evd create \
+            --predicate qa-jira-issues.json \
+            --markdown qa-jira-issues.md \
+            --predicate-type "Attribute Report" \
+            --release-bundle ${{ github.event.repository.name }} \
+            --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
+            --project bookverse \
+            --key-alias "bookverse_key" \
+            --key "${{ secrets.BOOKVERSE_KEY }}"
 
       - name: Promote to STAGE
         run: |

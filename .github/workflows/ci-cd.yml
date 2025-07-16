@@ -317,22 +317,37 @@ jobs:
         run: |
           jfrog rbp ${{ github.event.repository.name }} ${{ needs.build-and-publish.outputs.version }} STAGE --promotion-type=move --include-repos=bookverse-docker-internal
 
-      - name: Create and Attach STAGE Sign-off & Trace Evidence (Gate to PROD)
+      - name: Create and Attach STAGE Sign-off & Trace Evidence (PROD Gate)
         run: |
           # Randomly select an approver
           approvers=("product-manager-a@bookverse.com" "product-manager-b@bookverse.com" "cto@bookverse.com")
           approver=${approvers[$RANDOM % ${#approvers[@]}]}
           trace_id="trace-$(openssl rand -hex 8)"
 
+          # Create Stage Sign-off JSON and Markdown
           cat <<EOF > stage-signoff.json
           {
             "attributes": [
-              { "name": "quality_gate_passed", "value": true },
-              { "name": "approved_by", "value": "$approver" }
+              {
+                "name": "quality_gate_passed",
+                "value": true
+              },
+              {
+                "name": "approved_by",
+                "value": "$approver"
+              }
             ]
           }
           EOF
+          cat <<EOF > stage-signoff.md
+          # STAGE Sign-off
+          | Field         | Value      |
+          |---------------|------------|
+          | **Approved By** | \`$approver\`|
+          | **Gate Status** | PASSED     |
+          EOF
 
+          # Create Runtime Trace JSON and Markdown
           cat <<EOF > stage-runtime-trace.json
           {
             "trace_id": "$trace_id",
@@ -342,16 +357,33 @@ jobs:
             "details": "Application ran successfully under load test in staging environment."
           }
           EOF
+          cat <<EOF > stage-runtime-trace.md
+          # STAGE Runtime Trace
+          - **Environment:** STAGE
+          - **Status:** SUCCESS
+          - **Trace ID:** \`$trace_id\`
+          EOF
 
-          jf evd create --predicate stage-signoff.json \
-          --predicate-type "Attribute Rport" \
-          --release-bundle ${{ github.event.repository.name }} --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
-          --project bookverse --key-alias "bookverse_key" --key "${{ secrets.BOOKVERSE_KEY }}"
-
-          jf evd create --predicate stage-runtime-trace.json \
-          --predicate-type "Runtime Trace" \
-          --release-bundle ${{ github.event.repository.name }} --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
-          --project bookverse --key-alias "bookverse_key" --key "${{ secrets.BOOKVERSE_KEY }}"
+          # Create Evidences with JFrog CLI
+          jfrog evd create \
+            --predicate stage-signoff.json \
+            --markdown stage-signoff.md \
+            --predicate-type "Stage Sign-off" \
+            --release-bundle ${{ github.event.repository.name }} \
+            --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
+            --project bookverse \
+            --key-alias "bookverse_key" \
+            --key "${{ secrets.BOOKVERSE_KEY }}"
+            
+          jfrog evd create \
+            --predicate stage-runtime-trace.json \
+            --markdown stage-runtime-trace.md \
+            --predicate-type "Runtime Trace" \
+            --release-bundle ${{ github.event.repository.name }} \
+            --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
+            --project bookverse \
+            --key-alias "bookverse_key" \
+            --key "${{ secrets.BOOKVERSE_KEY }}"
 
       - name: Promote to PROD and Update Latest Tag
         run: |

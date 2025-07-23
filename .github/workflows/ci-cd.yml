@@ -22,13 +22,13 @@ jobs:
           JF_URL: ${{ vars.JFROG_URL }}
           JF_USER: ${{ vars.JFROG_USER }}
           JF_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
-          JF_PROJECT: "bookverse"
+          JF_PROJECT: "hc-bookverse"
           JFROG_CLI_BUILD_NAME: ${{ github.event.repository.name }}
           JFROG_CLI_BUILD_NUMBER: ${{ github.run_number }}
 
       - name: Configure Artifactory for Python
         run: |
-          jfrog pipc --repo-resolve=bookverse-pypi-local
+          jfrog pipc --repo-resolve=hc-bookverse-pypi-local
 
       - name: Install Python dependencies with JFrog CLI
         run: |
@@ -43,20 +43,20 @@ jobs:
       - name: Build and Push Backend Image
         run: |
           REGISTRY_URL=$(echo "${{ vars.JFROG_URL }}" | sed 's|https://||')
-          IMAGE_TAG="$REGISTRY_URL/bookverse-docker-internal/${{ github.event.repository.name }}-backend:${{ steps.set_version.outputs.VERSION }}"
+          IMAGE_TAG="$REGISTRY_URL/hc-bookverse-docker-internal/${{ github.event.repository.name }}-backend:${{ steps.set_version.outputs.VERSION }}"
           jfrog docker build --pull -t $IMAGE_TAG \
             --build-arg JFROG_URL=${{ vars.JFROG_URL }} \
             --build-arg JFROG_USER=${{ vars.JFROG_USER }} \
             --build-arg JFROG_ACCESS_TOKEN=${{ secrets.JFROG_ACCESS_TOKEN }} \
             -f Dockerfile.backend .
-          jfrog rt dp $IMAGE_TAG bookverse-docker-internal --build-name=${{ github.event.repository.name }} --build-number=${{ github.run_number }}
+          jfrog rt dp $IMAGE_TAG hc-bookverse-docker-internal --build-name=${{ github.event.repository.name }} --build-number=${{ github.run_number }}
 
       - name: Build and Push Frontend Image
         run: |
           REGISTRY_URL=$(echo "${{ vars.JFROG_URL }}" | sed 's|https://||')
-          IMAGE_TAG="$REGISTRY_URL/bookverse-docker-internal/${{ github.event.repository.name }}-frontend:${{ steps.set_version.outputs.VERSION }}"
+          IMAGE_TAG="$REGISTRY_URL/hc-bookverse-docker-internal/${{ github.event.repository.name }}-frontend:${{ steps.set_version.outputs.VERSION }}"
           jfrog docker build --pull -t $IMAGE_TAG -f Dockerfile.frontend .
-          jfrog rt dp $IMAGE_TAG bookverse-docker-internal --build-name=${{ github.event.repository.name }} --build-number=${{ github.run_number }}
+          jfrog rt dp $IMAGE_TAG hc-bookverse-docker-internal --build-name=${{ github.event.repository.name }} --build-number=${{ github.run_number }}
 
       - name: Collect Git information for Build Info
         run: |
@@ -72,7 +72,7 @@ jobs:
 
       - name: Create Microservice Release Bundle
         run: |
-          jfrog rbc ${{ github.event.repository.name }} ${{ steps.set_version.outputs.VERSION }} --project=bookverse --build-name=${{ github.event.repository.name }} --build-number=${{ github.run_number }}
+          jfrog rbc ${{ github.event.repository.name }} ${{ steps.set_version.outputs.VERSION }} --project=hc-bookverse --build-name=${{ github.event.repository.name }} --build-number=${{ github.run_number }}
 
       - name: Set Initial Annotations on Release Bundle
         run: |
@@ -115,7 +115,7 @@ jobs:
           jf evd create --predicate build-link-evidence.json \
           --predicate-type "Build Link"  --markdown build-link-evidence.md \
           --release-bundle ${{ github.event.repository.name }} --release-bundle-version ${{ steps.set_version.outputs.VERSION }} \
-          --project bookverse --key-alias "bookverse_key" --key "${{ secrets.BOOKVERSE_KEY }}"
+          --project hc-bookverse --key-alias "hc-bookverse-key" --key "${{ secrets.BOOKVERSE_KEY }}"
 
   promote-bundle:
     needs: build-and-publish
@@ -129,7 +129,7 @@ jobs:
           JF_URL: ${{ vars.JFROG_URL }}
           JF_USER: ${{ vars.JFROG_USER }}
           JF_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
-          JF_PROJECT: "bookverse"
+          JF_PROJECT: "hc-bookverse"
 
       - name: Create and Attach Commit Review Evidence (Pre-DEV Gate)
         run: |
@@ -166,11 +166,11 @@ jobs:
           jf evd create --predicate commit-review.json \
           --predicate-type "Attribute Report" --markdown commit-review.md \
           --release-bundle ${{ github.event.repository.name }} --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
-          --project bookverse --key-alias "bookverse_key" --key "${{ secrets.BOOKVERSE_KEY }}"
+          --project hc-bookverse --key-alias "hc-bookverse_key" --key "${{ secrets.BOOKVERSE_KEY }}"
 
       - name: Promote to DEV
         run: |
-          jfrog rbp ${{ github.event.repository.name }} ${{ needs.build-and-publish.outputs.version }} DEV --promotion-type=move --include-repos=bookverse-docker-internal
+          jfrog rbp ${{ github.event.repository.name }} ${{ needs.build-and-publish.outputs.version }} DEV --promotion-type=move --include-repos=hc-bookverse-docker-internal
 
       - name: Create and Attach DEV Smoke Test Evidence (QA Gate)
         run: |
@@ -216,11 +216,11 @@ jobs:
           jf evd create --predicate dev-smoke-test.json \
           --predicate-type "Test Results" --markdown dev-smoke-test.md \
           --release-bundle ${{ github.event.repository.name }} --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
-          --project bookverse --key-alias "bookverse_key" --key "${{ secrets.BOOKVERSE_KEY }}"
+          --project hc-bookverse --key-alias "hc-bookverse_key" --key "${{ secrets.BOOKVERSE_KEY }}"
 
       - name: Promote to QA
         run: |
-          jfrog rbp ${{ github.event.repository.name }} ${{ needs.build-and-publish.outputs.version }} QA --promotion-type=move --include-repos=bookverse-docker-internal
+          jfrog rbp ${{ github.event.repository.name }} ${{ needs.build-and-publish.outputs.version }} QA --promotion-type=move --include-repos=hc-bookverse-docker-internal
 
       - name: Create and Attach QA Test & Jira Evidence (STAGE Gate)
         run: |
@@ -299,8 +299,8 @@ jobs:
             --predicate-type "Test Result" \
             --release-bundle ${{ github.event.repository.name }} \
             --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
-            --project bookverse \
-            --key-alias "bookverse_key" \
+            --project hc-bookverse \
+            --key-alias "hc-bookverse_key" \
             --key "${{ secrets.BOOKVERSE_KEY }}"
             
           jfrog evd create \
@@ -309,13 +309,13 @@ jobs:
             --predicate-type "Attribute Report" \
             --release-bundle ${{ github.event.repository.name }} \
             --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
-            --project bookverse \
-            --key-alias "bookverse_key" \
+            --project hc-bookverse \
+            --key-alias "hc-bookverse_key" \
             --key "${{ secrets.BOOKVERSE_KEY }}"
 
       - name: Promote to STAGE
         run: |
-          jfrog rbp ${{ github.event.repository.name }} ${{ needs.build-and-publish.outputs.version }} STAGE --promotion-type=move --include-repos=bookverse-docker-internal
+          jfrog rbp ${{ github.event.repository.name }} ${{ needs.build-and-publish.outputs.version }} STAGE --promotion-type=move --include-repos=hc-bookverse-docker-internal
 
       - name: Create and Attach STAGE Sign-off & Trace Evidence (PROD Gate)
         run: |
@@ -371,8 +371,8 @@ jobs:
             --predicate-type "Stage Sign-off" \
             --release-bundle ${{ github.event.repository.name }} \
             --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
-            --project bookverse \
-            --key-alias "bookverse_key" \
+            --project hc-bookverse \
+            --key-alias "hc-bookverse_key" \
             --key "${{ secrets.BOOKVERSE_KEY }}"
             
           jfrog evd create \
@@ -381,8 +381,8 @@ jobs:
             --predicate-type "Runtime Trace" \
             --release-bundle ${{ github.event.repository.name }} \
             --release-bundle-version ${{ needs.build-and-publish.outputs.version }} \
-            --project bookverse \
-            --key-alias "bookverse_key" \
+            --project hc-bookverse \
+            --key-alias "hc-bookverse_key" \
             --key "${{ secrets.BOOKVERSE_KEY }}"
 
       - name: Promote to PROD and Update Latest Tag
@@ -394,7 +394,7 @@ jobs:
 
           # 1. Promote the new version to the PROD repository
           echo "Promoting version $NEW_VERSION to PROD..."
-          jfrog rbp "$RELEASE_BUNDLE_NAME" "$NEW_VERSION" PROD --promotion-type=move --include-repos=bookverse-docker-internal-prod
+          jfrog rbp "$RELEASE_BUNDLE_NAME" "$NEW_VERSION" PROD --promotion-type=move --include-repos=hc-bookverse-docker-internal-prod
 
           # 2. Apply the 'latest' tag to the newly promoted version, preserving existing properties.
           echo "Applying 'latest' tag to version $NEW_VERSION..."
@@ -402,7 +402,7 @@ jobs:
           
           # 3. Use the API to find ALL OTHER release bundles currently tagged 'latest'
           echo "Searching for all other bundles tagged 'latest' to clean them up..."
-          LATEST_BUNDLES_JSON=$(curl -s -H "Authorization: Bearer ${{ secrets.JFROG_ACCESS_TOKEN }}" "$JFROG_RECORDS_API_URL?project=bookverse")
+          LATEST_BUNDLES_JSON=$(curl -s -H "Authorization: Bearer ${{ secrets.JFROG_ACCESS_TOKEN }}" "$JFROG_RECORDS_API_URL?project=hc-bookverse")
           
           # Use jq to create a list of versions to process, excluding the version we just promoted.
           PREVIOUS_LATEST_VERSIONS=$(echo "$LATEST_BUNDLES_JSON" | jq -r --arg new_ver "$NEW_VERSION" '.release_bundles[] | select(.bundle_tag == "latest" and .release_bundle_version != $new_ver) | .release_bundle_version')
@@ -414,7 +414,7 @@ jobs:
               echo "--- Processing old version: $version ---"
               
               # Fetch the specific properties for this old version
-              PROPS_JSON=$(curl -s -H "Authorization: Bearer ${{ secrets.JFROG_ACCESS_TOKEN }}" "$JFROG_RECORDS_API_URL/$version?project=bookverse")
+              PROPS_JSON=$(curl -s -H "Authorization: Bearer ${{ secrets.JFROG_ACCESS_TOKEN }}" "$JFROG_RECORDS_API_URL/$version?project=hc-bookverse")
               OLD_CADENCE_TAG=$(echo "$PROPS_JSON" | jq -r '(.properties // [])[] | select(.key == "release.cadence") | .value')
 
               if [[ -n "$OLD_CADENCE_TAG" ]]; then
